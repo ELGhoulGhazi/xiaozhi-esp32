@@ -7,6 +7,8 @@
 #include "config.h"
 #include "led/single_led.h"
 #include "assets/lang_config.h"
+#include "mcp_server.h"
+#include "music_player.h"
 #include <esp_log.h>
 #include <esp_efuse_table.h>
 #include <driver/i2c_master.h>
@@ -143,6 +145,99 @@ private:
     PowerSaveTimer* power_save_timer_ = nullptr;
     // esp_lcd_panel_handle_t panel_ = nullptr;
     PowerManager* power_manager_ = nullptr;
+    MusicPlayer* music_player_ = nullptr;
+
+    void InitializeMusicPlayer() {
+        music_player_ = new MusicPlayer(GetAudioCodec());
+        if (!music_player_->InitSdCard()) {
+            ESP_LOGW(TAG, "No SD card found, music player disabled");
+            delete music_player_;
+            music_player_ = nullptr;
+            return;
+        }
+        ESP_LOGI(TAG, "Music player initialized with %d tracks", music_player_->GetTrackCount());
+    }
+
+    void InitializeMcpTools() {
+        auto& mcp = McpServer::GetInstance();
+
+        mcp.AddTool("self.music.play",
+            "Play music from SD card. Optionally specify a filename to play a specific track. "
+            "Use self.music.list to get available tracks first.",
+            PropertyList({
+                Property("filename", kPropertyTypeString, std::string(""))
+            }),
+            [this](const PropertyList& props) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                auto filename = props["filename"].value<std::string>();
+                if (music_player_->Play(filename)) {
+                    auto track = music_player_->GetCurrentTrack();
+                    return std::string("Playing: ") + (track.empty() ? "starting" : track);
+                }
+                return std::string("Failed to play");
+            });
+
+        mcp.AddTool("self.music.pause",
+            "Pause the currently playing music.",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                music_player_->Pause();
+                return true;
+            });
+
+        mcp.AddTool("self.music.stop",
+            "Stop music playback completely.",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                music_player_->Stop();
+                return true;
+            });
+
+        mcp.AddTool("self.music.next",
+            "Skip to the next track.",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                music_player_->Next();
+                return std::string("Next track");
+            });
+
+        mcp.AddTool("self.music.previous",
+            "Go back to the previous track.",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                music_player_->Previous();
+                return std::string("Previous track");
+            });
+
+        mcp.AddTool("self.music.list",
+            "List all music tracks available on the SD card.",
+            PropertyList(),
+            [this](const PropertyList&) -> ReturnValue {
+                if (!music_player_) {
+                    return std::string("No SD card present. Please insert an SD card with music files and restart the device.");
+                }
+                auto tracks = music_player_->ListTracks();
+                cJSON* arr = cJSON_CreateArray();
+                for (const auto& t : tracks) {
+                    cJSON_AddItemToArray(arr, cJSON_CreateString(t.c_str()));
+                }
+                return arr;
+            });
+    }
 
     void InitializePowerSaveTimer() {
         rtc_gpio_init(GPIO_NUM_3);
@@ -402,9 +497,17 @@ public:
         // 显示和背光可用后再初始化省电逻辑，避免空指针
         InitializePowerSaveTimer();
         InitializePowerManager();
+
+        // Initialize music player and MCP tools
+        InitializeMusicPlayer();
+        InitializeMcpTools();
     }
 
     ~Spotpear_ESP32_S3_1_28_BOX() {
+        if (music_player_) {
+            delete music_player_;
+            music_player_ = nullptr;
+        }
         if (touchpad_timer_) {
             esp_timer_stop(touchpad_timer_);
             esp_timer_delete(touchpad_timer_);
