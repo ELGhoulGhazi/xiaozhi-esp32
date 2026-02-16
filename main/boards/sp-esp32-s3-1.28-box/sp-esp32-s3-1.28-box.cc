@@ -28,6 +28,10 @@
 #include "freertos/task.h"
 #include "power_manager.h"
 
+#include <esp_vfs_fat.h>
+#include <sdmmc_cmd.h>
+#include <driver/sdspi_host.h>
+
 #define TAG "Spotpear_ESP32_S3_1_28_BOX"
 
 // LV_FONT_DECLARE(font_puhui_16_4);
@@ -184,6 +188,46 @@ private:
                 power_save_timer_->SetEnabled(true);
             }
         });
+    }
+
+    void InitializeSdCard() {
+#if SDCARD_SDSPI_ENABLED
+        sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+        spi_bus_config_t bus_cfg = {
+            .mosi_io_num = SDCARD_SPI_MOSI,
+            .miso_io_num = SDCARD_SPI_MISO,
+            .sclk_io_num = SDCARD_SPI_SCLK,
+            .quadwp_io_num = -1,
+            .quadhd_io_num = -1,
+            .max_transfer_sz = 4000,
+        };
+        esp_err_t ret = spi_bus_initialize((spi_host_device_t)SDCARD_SPI_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to initialize SPI bus for SD card: %s", esp_err_to_name(ret));
+            return;
+        }
+
+        sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+        slot_config.gpio_cs = SDCARD_SPI_CS;
+        slot_config.host_id = (spi_host_device_t)SDCARD_SPI_HOST;
+
+        esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+            .format_if_mount_failed = false,
+            .max_files = 5,
+            .allocation_unit_size = 0,
+            .disk_status_check_enable = true,
+        };
+        sdmmc_card_t* card;
+        ret = esp_vfs_fat_sdspi_mount(SDCARD_MOUNT_POINT, &host, &slot_config, &mount_config, &card);
+        if (ret == ESP_OK) {
+            sdmmc_card_print_info(stdout, card);
+            ESP_LOGI(TAG, "SD card mounted at %s", SDCARD_MOUNT_POINT);
+        } else {
+            ESP_LOGW(TAG, "Failed to mount SD card: %s", esp_err_to_name(ret));
+        }
+#else
+        ESP_LOGI(TAG, "SD card disabled");
+#endif
     }
 
     void InitializeCodecI2c() {
@@ -398,6 +442,9 @@ public:
         // if (GetBacklight()) {
         //     GetBacklight()->RestoreBrightness();
         // }
+
+        // Mount SD card
+        InitializeSdCard();
 
         // 显示和背光可用后再初始化省电逻辑，避免空指针
         InitializePowerSaveTimer();

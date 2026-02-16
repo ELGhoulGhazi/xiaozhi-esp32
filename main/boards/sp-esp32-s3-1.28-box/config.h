@@ -5,8 +5,8 @@
 
 #include <driver/gpio.h>
 
-#define AUDIO_INPUT_SAMPLE_RATE  24000
-#define AUDIO_OUTPUT_SAMPLE_RATE 24000
+#define AUDIO_INPUT_SAMPLE_RATE  16000
+#define AUDIO_OUTPUT_SAMPLE_RATE 16000
 
 #define AUDIO_I2S_GPIO_MCLK GPIO_NUM_16 //MCLK
 #define AUDIO_I2S_GPIO_WS GPIO_NUM_45  //LRCK
@@ -52,5 +52,14 @@
 // 电量检测相关引脚定义
 #define BATTERY_ADC_PIN         GPIO_NUM_1  // 电池电压检测ADC引脚
 #define BATTERY_CHARGING_PIN    GPIO_NUM_41 // 充电状态检测引脚
+
+// SD Card (SDSPI mode)
+#define SDCARD_SDSPI_ENABLED    1
+#define SDCARD_SPI_HOST         SPI2_HOST
+#define SDCARD_SPI_MOSI         GPIO_NUM_18
+#define SDCARD_SPI_MISO         GPIO_NUM_21
+#define SDCARD_SPI_SCLK         GPIO_NUM_17
+#define SDCARD_SPI_CS           GPIO_NUM_13
+#define SDCARD_MOUNT_POINT      "/sdcard"
 
 #endif // _BOARD_CONFIG_H_
