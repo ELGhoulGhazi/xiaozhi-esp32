@@ -176,14 +176,20 @@ void CustomWakeWord::Feed(const std::vector<int16_t>& data) {
                 ESP_LOGI(TAG, "Custom wake word detected: command_id=%d, string=%s, prob=%f", 
                         mn_result->command_id[i], mn_result->string, mn_result->prob[i]);
                 auto& command = commands_[mn_result->command_id[i] - 1];
+                last_detected_action_ = command.action;
+                last_detected_wake_word_ = command.text;
+
                 if (command.action == "wake") {
-                    last_detected_wake_word_ = command.text;
                     running_ = false;
                     input_buffer_.clear();
-                    
-                    if (wake_word_detected_callback_) {
-                        wake_word_detected_callback_(last_detected_wake_word_);
-                    }
+                }
+
+                if (wake_word_detected_callback_) {
+                    wake_word_detected_callback_(last_detected_wake_word_);
+                }
+
+                if (command.action != "wake") {
+                    multinet_->clean(multinet_model_data_);
                 }
             }
             multinet_->clean(multinet_model_data_);
@@ -300,4 +306,22 @@ bool CustomWakeWord::GetWakeWordOpus(std::vector<uint8_t>& opus) {
     opus.swap(wake_word_opus_.front());
     wake_word_opus_.pop_front();
     return !opus.empty();
+}
+
+void CustomWakeWord::RegisterExtraCommands(const std::vector<Command>& extra) {
+    if (multinet_model_data_ == nullptr) {
+        ESP_LOGE(TAG, "MultiNet not initialized, cannot register commands");
+        return;
+    }
+    for (auto& cmd : extra) {
+        commands_.push_back(cmd);
+        ESP_LOGI(TAG, "Registered command: %s, Text: %s, Action: %s",
+                 cmd.command.c_str(), cmd.text.c_str(), cmd.action.c_str());
+    }
+    esp_mn_commands_clear();
+    for (size_t i = 0; i < commands_.size(); i++) {
+        esp_mn_commands_add(i + 1, commands_[i].command.c_str());
+    }
+    esp_mn_commands_update();
+    multinet_->print_active_speech_commands(multinet_model_data_);
 }

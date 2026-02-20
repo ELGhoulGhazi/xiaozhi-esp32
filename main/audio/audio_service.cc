@@ -538,6 +538,38 @@ const std::string& AudioService::GetLastWakeWord() const {
     return wake_word_->GetLastDetectedWakeWord();
 }
 
+const std::string& AudioService::GetLastWakeWordAction() const {
+    if (wake_word_) return wake_word_->GetLastDetectedAction();
+    static const std::string default_action = "wake";
+    return default_action;
+}
+
+std::string AudioService::GetWakeWordLanguage() const {
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32P4
+    auto* custom_ww = dynamic_cast<CustomWakeWord*>(wake_word_.get());
+    if (custom_ww) return custom_ww->GetLanguage();
+#endif
+    return "cn";
+}
+
+void AudioService::RegisterExtraCommands(const std::vector<std::tuple<std::string,std::string,std::string>>& commands) {
+    if (!wake_word_) {
+        ESP_LOGW("AudioService", "No wake word engine, cannot register commands");
+        return;
+    }
+    // Try to cast to CustomWakeWord which supports extra commands
+    auto* custom_ww = dynamic_cast<CustomWakeWord*>(wake_word_.get());
+    if (!custom_ww) {
+        ESP_LOGW("AudioService", "Wake word engine does not support extra commands (need CustomWakeWord)");
+        return;
+    }
+    std::vector<CustomWakeWord::Command> cmds;
+    for (auto& [command, text, action] : commands) {
+        cmds.push_back({command, text, action});
+    }
+    custom_ww->RegisterExtraCommands(cmds);
+}
+
 std::unique_ptr<AudioStreamPacket> AudioService::PopWakeWordPacket() {
     auto packet = std::make_unique<AudioStreamPacket>();
     if (wake_word_->GetWakeWordOpus(packet->payload)) {

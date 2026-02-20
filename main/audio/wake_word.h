@@ -21,6 +21,10 @@ public:
     virtual void EncodeWakeWordData() = 0;
     virtual bool GetWakeWordOpus(std::vector<uint8_t>& opus) = 0;
     virtual const std::string& GetLastDetectedWakeWord() const = 0;
+    virtual const std::string& GetLastDetectedAction() const {
+        static const std::string default_action = "wake";
+        return default_action;
+    }
 };
 
 #endif

@@ -14,6 +14,7 @@
 #include "protocol.h"
 #include "ota.h"
 #include "audio_service.h"
+#include "sd_card_player.h"
 #include "device_state.h"
 #include "device_state_machine.h"
 
@@ -134,6 +135,8 @@ private:
     AecMode aec_mode_ = kAecOff;
     std::string last_error_message_;
     AudioService audio_service_;
+    SdCardPlayer sd_card_player_;
+    bool sd_player_commands_registered_ = false;
     std::unique_ptr<Ota> ota_;
 
     bool has_server_time_ = false;

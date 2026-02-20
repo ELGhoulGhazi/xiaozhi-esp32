@@ -19,6 +19,12 @@
 
 class CustomWakeWord : public WakeWord {
 public:
+    struct Command {
+        std::string command;
+        std::string text;
+        std::string action;
+    };
+
     CustomWakeWord();
     ~CustomWakeWord();
 
@@ -31,13 +37,13 @@ public:
     void EncodeWakeWordData();
     bool GetWakeWordOpus(std::vector<uint8_t>& opus);
     const std::string& GetLastDetectedWakeWord() const { return last_detected_wake_word_; }
+    const std::string& GetLastDetectedAction() const override { return last_detected_action_; }
+    const std::string& GetLanguage() const { return language_; }
+
+    // Register additional commands at runtime (e.g. music player commands)
+    void RegisterExtraCommands(const std::vector<Command>& extra);
 
 private:
-    struct Command {
-        std::string command;
-        std::string text;
-        std::string action;
-    };
 
     // multinet 相关成员变量
     esp_mn_iface_t* multinet_ = nullptr;
@@ -52,6 +58,7 @@ private:
     std::function<void(const std::string& wake_word)> wake_word_detected_callback_;
     AudioCodec* codec_ = nullptr;
     std::string last_detected_wake_word_;
+    std::string last_detected_action_ = "wake";
     std::atomic<bool> running_ = false;
     std::vector<int16_t> input_buffer_;
     std::mutex input_buffer_mutex_;

@@ -774,12 +774,26 @@ void Application::HandleStopListeningEvent() {
 }
 
 void Application::HandleWakeWordDetectedEvent() {
+    auto action = audio_service_.GetLastWakeWordAction();
+    auto wake_word = audio_service_.GetLastWakeWord();
+
+    // Handle music control commands (works even without server connection)
+    if (action != "wake") {
+        ESP_LOGI(TAG, "Music command: %s (%s)", action.c_str(), wake_word.c_str());
+        sd_card_player_.HandleCommand(action);
+        return;
+    }
+
+    // "wake" action: stop music if playing before entering conversation
+    if (sd_card_player_.IsPlaying()) {
+        sd_card_player_.HandleCommand("stop_music");
+    }
+
     if (!protocol_) {
         return;
     }
 
     auto state = GetDeviceState();
-    auto wake_word = audio_service_.GetLastWakeWord();
     ESP_LOGI(TAG, "Wake word detected: %s (state: %d)", wake_word.c_str(), (int)state);
 
     if (state == kDeviceStateIdle) {
@@ -869,6 +883,15 @@ void Application::HandleStateChangedEvent() {
             display->SetEmotion("neutral"); // Then set emotion (wechat mode checks child count)
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
+            // Register SD card player voice commands once wake word engine is initialized
+            if (!sd_player_commands_registered_) {
+                sd_card_player_.Initialize(&audio_service_, board.GetAudioCodec());
+                auto lang = audio_service_.GetWakeWordLanguage();
+                auto cmds = SdCardPlayer::GetCommandsForLanguage(lang);
+                audio_service_.RegisterExtraCommands(cmds);
+                sd_player_commands_registered_ = true;
+                ESP_LOGI(TAG, "SD card player commands registered (lang=%s)", lang.c_str());
+            }
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
